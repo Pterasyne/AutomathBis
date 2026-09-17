@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Arithmetic Task</title>
+  <script src="jspsych/dist/jspsych.js"></script>
+  <script src="jspsych/dist/plugin-survey-text.js"></script>
+  <script src="jspsych/dist/plugin-fullscreen.js"></script>
+  <script src="jspsych/dist/plugin-call-function.js"></script>
+  <script src="jspsych/dist/plugin-html-button-response.js"></script>
+  <script src="jspsych/dist/plugin-html-keyboard-response.js"></script>
+  <link rel="stylesheet" href="jspsych/dist/jspsych.css">
+</head>
+<body></body>
+<script>
+const jsPsych = initJsPsych({
+  on_finish: function() {
+    //override_safe_mode: true,
+    let code = jsPsych.data.get().values()[0].participant_code || "NA";
+    jsPsych.data.get().localSave('csv', `arithmetic_${code}.csv`);
+  }
+});
+
+const FIXATION_DURATION = 500;
+const BREAK_KEYS = ['0','1','2','3','4','5','6','7','8','9'];   
+
+const fullscreen = {
+  type: jsPsychFullscreen,
+  fullscreen_mode: true,
+  message: "L'expérience passera en mode plein écran lorsque tu appuieras sur le bouton ci-dessous<br><br><br>",
+  button_label: "Continuer"
+};
+
+const participant_info = {
+  type: jsPsychSurveyText,
+  questions: [{ prompt: "Quel est le code participant ?", name: "Code", required: true }], //see SubitizingTask for more possibilities
+  button_label: "Continuer pour afficher les consignes",
+  on_finish: function(data) {
+    const code = data.response.Code;
+    jsPsych.data.addProperties({ participant_code: code });
+
+    if (/^\d+$/.test(code)) {
+      let num = parseInt(code); 
+      responseMapping = num % 2 === 0 ? { true: "e", false: "i" } : { true: "i", false: "e" };
+    }
+  }
+};
+
+const instructions = {
+  type: jsPsychHtmlButtonResponse,
+  stimulus: function() {
+    return `<p>Début de l'entraînement.</p>
+            <p><br><br>Tu vas voir plusieurs additions.</p>
+            <p>Appuie sur <strong>V</strong> si l'addition est VRAIE.<br>
+            Appuie sur <strong>F</strong> si elle est FAUSSE.</p>`;
+  },
+  choices: ["Commencer l'entraînement"]
+};
+
+const outro_training = {
+  type: jsPsychHtmlKeyboardResponse,
+  stimulus: "<p>Fin de l'entraînement.<br><br>Appuie sur une touche pour commencer la vraie expérience.</p>",
+  choices: "ALL_KEYS"
+};
+
+const hide_cursor = {
+  type: jsPsychCallFunction,
+  func: function() {
+    if(!document.getElementById('hide-cursor')){
+      document.querySelector('head')
+        .insertAdjacentHTML(
+          'beforeend',
+          '<style id="hide-cursor">body { cursor: none !important; }</style>'
+        );
+    }
+  }
+};
+
+const show_cursor = {
+  type: jsPsychCallFunction,
+  func: function() {
+    const el = document.getElementById('hide-cursor');
+    if(el) el.remove();
+  }
+};
+
+function shuffle(arr){
+  for(let i=arr.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [arr[i],arr[j]]=[arr[j],arr[i]];
+  }
+  return arr;
+}
+
+function generateAdditionPairsUnderTen() {
+  const pairs = [];
+  for(let a=1;a<=9;a++){
+    for(let b=1;b<=9-a;b++){
+      pairs.push({num1:a,num2:b,correct_sum:a+b});
+    }
+  }
+  return pairs; //36
+}
+
+function makeTrial(eq, type) {
+  let sum, trial_kind;
+  switch(type){
+    case "true": sum = eq.correct_sum; trial_kind="true"; break;
+    case "false_plus1": sum = eq.correct_sum+1; trial_kind="false_plus1"; break;
+    case "false_minus1": sum = eq.correct_sum-1; trial_kind="false_minus1"; break;
+  }
+  return {
+    stimulus: `<div style="font-size:48px;">${eq.num1} + ${eq.num2} = ${sum}</div>`,
+    expected: type === "true",
+    trial_kind: trial_kind,
+    num1: eq.num1,
+    num2: eq.num2,
+    correct_sum: eq.correct_sum,
+    displayed_sum: sum
+  };
+}
+
+const fixation = { type: jsPsychHtmlKeyboardResponse, stimulus: '<div style="font-size:48px;">*</div>', choices: "NO_KEYS", trial_duration: FIXATION_DURATION };
+
+function generateTrainingTrials() {
+  const pool = shuffle(generateAdditionPairsUnderTen()).slice(0,3);
+  return pool.map((eq,i) => {
+    const types = ["true","false_plus1","false_minus1"];
+    return makeTrial(eq, types[i]);
+  });
+}
+
+const training_trials = {
+  timeline: [
+    fixation,
+    {
+      type: jsPsychHtmlKeyboardResponse,
+      stimulus: jsPsych.timelineVariable("stimulus"),
+      choices: ["e","i","0"],
+      data: {
+        expected: jsPsych.timelineVariable("expected"),
+        trial_kind: jsPsych.timelineVariable("trial_kind"),
+        phase: "training",
+        num1: jsPsych.timelineVariable("num1"),
+        num2: jsPsych.timelineVariable("num2"),
+        correct_sum: jsPsych.timelineVariable("correct_sum"),
+        displayed_sum: jsPsych.timelineVariable("displayed_sum")
+      },
+      on_finish: function(data){
+        if (data.response === "0") {
+          data.response_matching = null;
+          data.correct = null;
+          data.response_type = "undef";
+          return;
+        }
+        let response_matches_mapping = jsPsych.pluginAPI.compareKeys(
+          data.response,
+          responseMapping[true]
+        );
+        data.response_matching = response_matches_mapping
+        data.correct = response_matches_mapping === data.expected;
+        data.response_type = "defined";
+        data.response_key = data.response; 
+        data.reaction_time = data.rt; 
+      }
+    }
+  ],
+  timeline_variables: generateTrainingTrials(),
+  randomize_order: true
+};
+
+function buildMainTrials() {
+  const eqs = generateAdditionPairsUnderTen();
+  const trials = [];
+  // doubling number of "true" trials here, if you want each trial kind to be equiprobable, replace by :   
+  // eqs.forEach(eq => ["true","false_plus1","false_minus1"].forEach(t => trials.push(makeTrial(eq,t))));
+  eqs.forEach(eq => ["true","true","false_plus1","false_minus1"].forEach(t => trials.push(makeTrial(eq,t))));
+  return shuffle(trials);
+}
+
+function make_arithmetic_trials(trials) {
+  return {
+    timeline: [
+      fixation,
+      {
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: jsPsych.timelineVariable('stimulus'),
+        choices: ["e","i","0"],
+        data: {
+          expected: jsPsych.timelineVariable('expected'),
+          trial_kind: jsPsych.timelineVariable('trial_kind'),
+          phase: "main",
+          num1: jsPsych.timelineVariable("num1"),
+          num2: jsPsych.timelineVariable("num2"),
+          correct_sum: jsPsych.timelineVariable("correct_sum"),
+          displayed_sum: jsPsych.timelineVariable("displayed_sum")
+        },
+        on_finish: function(data){
+        if (data.response === "0") {
+          data.response_matching = null;
+          data.correct = null;
+          data.response_type = "undef";
+          return;
+        }
+        let response_matches_mapping = jsPsych.pluginAPI.compareKeys(
+          data.response,
+          responseMapping[true]
+        );
+        data.response_matching = response_matches_mapping
+        data.correct = response_matches_mapping === data.expected;
+        data.response_type = "defined";
+        data.response_key = data.response; 
+        data.reaction_time = data.rt; 
+        }
+      }
+    ],
+    timeline_variables: trials
+  };
+}
+
+const break_screen = {
+  type: jsPsychHtmlKeyboardResponse,
+  stimulus: "<p>Pause !<br>Appuie sur une touche numérique pour continuer.</p>",
+  choices: BREAK_KEYS
+};
+
+const all_trials = buildMainTrials();
+const half = Math.floor(all_trials.length / 2);
+const arithmetic_block1 = all_trials.slice(0, half);
+const arithmetic_block2 = all_trials.slice(half);
+
+const exit_fullscreen = { type: jsPsychFullscreen, fullscreen_mode: false };
+
+jsPsych.run([fullscreen, participant_info, instructions, hide_cursor, training_trials,
+  outro_training, make_arithmetic_trials(arithmetic_block1),
+  break_screen, make_arithmetic_trials(arithmetic_block2),
+  show_cursor, exit_fullscreen
+]);
+
+</script>
+</html>
