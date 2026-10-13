@@ -8,5 +8,7 @@ Please note that, among the small differences in this project:
 
 ## Analyses
 First, we propose a new code for mistake during experiment by swapping stickers for true/false keys : [wrongMapping.py](https://github.com/Pterasyne/AutomathBis/blob/main/wrongMapping.py) (the idea is to correct the wrong parity)
-### Strat
-Very similar to our first way to analyse strategies.
+### Strategies
+[0_preBisStrat.py](https://github.com/Pterasyne/AutomathBis/blob/main/0_preBisStrat.py) is very similar to our first way to analyse strategies. As a reminder, we changed our column "2" to mean "second" operand rather than largest. Consequently, if you want to compare our first experiment to this second waves, you need to add some lines of codes to switch the meaning.
+### Arithmetic (verification task)
+[0_preArithmeticCleanTheData.py](https://github.com/Pterasyne/AutomathBis/blob/main/0_preArithmeticCleanTheData.py) followed by [0_preArithmeticFilterTheData.py](https://github.com/Pterasyne/AutomathBis/blob/main/0_preArithmeticFilterTheData.py) are also similar. However, for each equations there is now two times a true printed result. As such, and at least for the moment, we averaged both value for each equation (e.g., "1 + 1") and each participant.
